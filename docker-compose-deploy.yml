@@ -1,0 +1,110 @@
+# C:\Users\code\Documents\project\yoogiscloset\docker-compose-deploy.yml
+services:
+  # MySQL Database for Production
+  mysql:
+    image: mysql:8.0
+    container_name: yoogiscloset-mysql-prod
+    environment:
+      MYSQL_ROOT_PASSWORD: 0000
+      MYSQL_DATABASE: ygkoibitodocker
+      MYSQL_USER: yoogiscloset
+      MYSQL_PASSWORD: 0000
+    volumes:
+      - mysql_prod_data:/var/lib/mysql
+    networks:
+      - yoogiscloset-prod-network
+    restart: always
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p0000"]
+      timeout: 20s
+      retries: 10
+
+  # Spring Boot Application for Production
+  app:
+    image: yooseokcho/yoogiscloset:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: yoogiscloset-app-prod
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      # ▼▼▼▼▼ [핵심 수정] .url -> _url 로 변경 ▼▼▼▼▼
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ygkoibitodocker?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      # ▲▲▲▲▲ [핵심 수정] .url -> _url 로 변경 ▲▲▲▲▲
+      SPRING_DATASOURCE_USERNAME: yoogiscloset
+      SPRING_DATASOURCE_PASSWORD: 0000
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_SHOW_SQL: false
+      JAVA_OPTS: -Xmx512m -Xms256m
+    ports:
+      - "8081:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      selenium:
+        condition: service_started
+    networks:
+      - yoogiscloset-prod-network
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # Selenium Hub for Production
+  selenium:
+    image: selenium/hub:4.21.0
+    container_name: yoogiscloset-selenium-hub-prod
+    ports:
+      - "4445:4444"
+    networks:
+      - yoogiscloset-prod-network
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4444/wd/hub/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Selenium Chrome Node for Production
+  selenium-chrome:
+    image: selenium/node-chrome:4.21.0
+    container_name: yoogiscloset-selenium-chrome-prod
+    shm_size: 2gb
+    environment:
+      - SE_EVENT_BUS_HOST=selenium
+      - SE_EVENT_BUS_PUBLISH_PORT=4442
+      - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
+      - SE_NODE_MAX_SESSIONS=2
+      - SE_NODE_SESSION_TIMEOUT=300
+    depends_on:
+      - selenium
+    networks:
+      - yoogiscloset-prod-network
+    restart: always
+
+  # Nginx Reverse Proxy (Optional)
+  nginx:
+    image: nginx:alpine
+    container_name: yoogiscloset-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - app
+    networks:
+      - yoogiscloset-prod-network
+    restart: always
+
+volumes:
+  mysql_prod_data:
+    driver: local
+
+networks:
+  yoogiscloset-prod-network:
+    driver: bridge

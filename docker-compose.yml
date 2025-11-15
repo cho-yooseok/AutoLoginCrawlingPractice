@@ -1,0 +1,91 @@
+# C:\Users\code\Documents\project\yoogiscloset\docker-compose.yml
+services:
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: yoogiscloset-mysql-dev
+    environment:
+      MYSQL_ROOT_PASSWORD: 0000
+      MYSQL_DATABASE: ygkoibitodocker
+      MYSQL_USER: yoogiscloset
+      MYSQL_PASSWORD: 0000
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_dev_data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d
+    networks:
+      - yoogiscloset-dev-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p0000"]
+      timeout: 20s
+      retries: 10
+
+  # Spring Boot Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: yoogiscloset-app-dev
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      # --- [수정된 부분] ---
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ygkoibitodocker?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      # ---------------------
+      SPRING_DATASOURCE_USERNAME: yoogiscloset
+      SPRING_DATASOURCE_PASSWORD: 0000
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_SHOW_SQL: true
+    ports:
+      - "8081:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      selenium:
+        condition: service_started
+    networks:
+      - yoogiscloset-dev-network
+    restart: unless-stopped
+
+  # Selenium Hub
+  selenium:
+    image: selenium/hub:4.21.0
+    container_name: yoogiscloset-selenium-hub
+    ports:
+      - "4444:4444"
+      - "4442:4442"
+      - "4443:4443"
+    networks:
+      - yoogiscloset-dev-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4444/wd/hub/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Selenium Chrome Node
+  selenium-chrome:
+    image: selenium/node-chrome:4.21.0
+    container_name: yoogiscloset-selenium-chrome
+    shm_size: 2gb
+    environment:
+      - SE_EVENT_BUS_HOST=selenium
+      - SE_EVENT_BUS_PUBLISH_PORT=4442
+      - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
+      - SE_NODE_MAX_SESSIONS=2
+      - SE_NODE_SESSION_TIMEOUT=300
+    depends_on:
+      - selenium
+    networks:
+      - yoogiscloset-dev-network
+    restart: unless-stopped
+
+volumes:
+  mysql_dev_data:
+    driver: local
+
+networks:
+  yoogiscloset-dev-network:
+    driver: bridge
