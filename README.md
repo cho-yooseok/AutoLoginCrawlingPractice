@@ -373,7 +373,7 @@ POST /auth/yoogiscloset/session
 ]
 ```
 
-### 🛒 Yoogiscloset Sell Integration API (통합 판매 등록)
+###  Yoogiscloset Sell Integration API (통합 판매 등록)
 
 #### 1. 고이비토 상품 ID로 판매 등록
 ```http
@@ -392,7 +392,7 @@ POST /api/yoogiscloset/sell/integration/submit/{koibitoProductId}
 }
 ```
 
-### 📊 Health Check API
+###  Health Check API
 
 #### 1. 서비스 상태 확인
 ```http
